@@ -9,6 +9,7 @@ from utils.constants import TEMP_DIR
 from telethon.types import DocumentAttributeVideo
 from PIL import Image
 import os
+import ffmpeg
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,27 @@ def get_video_display_size(file_path):
         # 如果失败，回退到获取原始尺寸（不考虑旋转）
         # 这里可以添加一个备选方案，例如用ffmpeg（如果你最终还是允许的话）
         return None, None, 0
-    
+
+def get_video_info(file_path):
+    try:
+        probe = ffmpeg.probe(file_path)
+        video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+        if video_stream:
+            width = int(video_stream.get('width', 0))
+            height = int(video_stream.get('height', 0))
+            # 获取旋转信息（关键）
+            rotation = int(video_stream.get('tags', {}).get('rotate', 0))
+            # 如果存在旋转，修正显示尺寸
+            if rotation in [90, 270]:
+                display_width, display_height = height, width
+            else:
+                display_width, display_height = width, height
+            print(f"尺寸: {width}x{height}, 旋转: {rotation}°, 显示尺寸: {display_width}x{display_height}")
+            return display_width, display_height, rotation
+    except Exception as e:
+        print(f"ffmpeg 分析视频失败: {e}")
+    return None, None, 0
+
 async def handle_message_link(client, event):
     """处理 Telegram 消息链接"""
     if not event.message.text:
@@ -180,7 +201,7 @@ async def handle_single_message(client, message, event):
             if file_path:
                 logger.info(f'已下载媒体文件: {file_path}')
                 caption = message.text if message.text else ''
-                display_width, display_height, rotation = get_video_display_size(file_path)
+                display_width, display_height, rotation = get_video_info(file_path)
                 await client.send_file(
                     event.chat_id,
                     file_path,

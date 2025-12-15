@@ -15,7 +15,14 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y \
     gcc \
     python3-dev \
-    && rm -rf /var/lib/apt/lists/*
+    libjpeg-dev \
+    libpng-dev \
+    libwebp-dev \
+    zlib1g-dev \
+    libtiff-dev \
+    libopenjp2-7-dev \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*  # 清理缓存以减小镜像体积
 
 # 复制依赖文件并安装
 COPY requirements.txt .
