@@ -1,8 +1,12 @@
 import re
 import os
 import logging
+import telethon
+print(telethon.__version__)
+
 from utils.common import get_main_module, get_user_id
 from utils.constants import TEMP_DIR
+from telethon.types import DocumentAttributeVideo
 
 logger = logging.getLogger(__name__)
 
