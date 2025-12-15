@@ -125,17 +125,13 @@ async def handle_single_message(client, message, event):
             if file_path:
                 logger.info(f'已下载媒体文件: {file_path}')
                 caption = message.text if message.text else ''
-                # await client.send_file(
-                #     event.chat_id,
-                #     file_path,
-                #     caption=caption,
-                #     parse_mode=parse_mode,
-                #     buttons=buttons
-                # )
-                await client.send_video(
-                    chat_id = event.chat_id,
-                    video = file_path,
-                    supports_streaming=True
+                await client.send_file(
+                    event.chat_id,
+                    file_path,
+                    caption=caption,
+                    parse_mode=parse_mode,
+                    buttons=buttons,
+                    attributes=[DocumentAttributeVideo(duration=0, w=0, h=0, supports_streaming=True)],
                 )
                 logger.info('已转发单条媒体消息')
         else:
