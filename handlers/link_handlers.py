@@ -7,9 +7,53 @@ print(telethon.__version__)
 from utils.common import get_main_module, get_user_id
 from utils.constants import TEMP_DIR
 from telethon.types import DocumentAttributeVideo
+from PIL import Image
+import os
 
 logger = logging.getLogger(__name__)
 
+def get_video_display_size(file_path):
+    """
+    使用Pillow获取视频的正确显示尺寸（考虑旋转）。
+    返回 (display_width, display_height, rotation)
+    """
+    try:
+        # 使用Pillow打开视频文件（实际上是读取第一帧）
+        with Image.open(file_path) as img:
+            # 获取原始像素尺寸
+            original_width, original_height = img.size
+            rotation = 0
+            
+            # 尝试从EXIF信息中获取旋转标签（这是关键）
+            # 手机视频的旋转信息通常存储在EXIF的Orientation标签中
+            exif = img._getexif()
+            if exif:
+                # 274 是 EXIF 标签中 'Orientation' 的编号
+                orientation = exif.get(274)
+                if orientation:
+                    # 根据Orientation值确定旋转角度
+                    # 常见值：1=0°， 3=180°， 6=90°， 8=270°
+                    orientation_to_rotation = {1: 0, 3: 180, 6: 90, 8: 270}
+                    rotation = orientation_to_rotation.get(orientation, 0)
+            
+            # 根据旋转角度计算正确的显示尺寸
+            if rotation in [90, 270]:
+                # 如果旋转了90或270度，显示尺寸需要交换宽高
+                display_width = original_height
+                display_height = original_width
+            else:
+                display_width = original_width
+                display_height = original_height
+            
+            print(f"原始尺寸: {original_width}x{original_height}, 旋转: {rotation}°, 显示尺寸: {display_width}x{display_height}")
+            return display_width, display_height, rotation
+            
+    except Exception as e:
+        print(f"使用Pillow分析视频文件失败: {e}")
+        # 如果失败，回退到获取原始尺寸（不考虑旋转）
+        # 这里可以添加一个备选方案，例如用ffmpeg（如果你最终还是允许的话）
+        return None, None, 0
+    
 async def handle_message_link(client, event):
     """处理 Telegram 消息链接"""
     if not event.message.text:
@@ -116,6 +160,13 @@ async def handle_media_group(client, user_client, chat_id, message, event):
             except Exception as e:
                 logger.error(f'删除临时文件失败 {file_path}: {str(e)}')
 
+async def download_and_forward_video(client, source_message, target_entity):
+    # 1. 下载视频媒体文件
+    file_path = await source_message.download_media(file="./downloads/")
+    if not file_path:
+        print("视频下载失败")
+        return
+
 async def handle_single_message(client, message, event):
     """处理单条消息"""
     parse_mode = 'Markdown'
@@ -129,13 +180,14 @@ async def handle_single_message(client, message, event):
             if file_path:
                 logger.info(f'已下载媒体文件: {file_path}')
                 caption = message.text if message.text else ''
+                display_width, display_height, rotation = get_video_display_size(file_path)
                 await client.send_file(
                     event.chat_id,
                     file_path,
                     caption=caption,
                     parse_mode=parse_mode,
                     buttons=buttons,
-                    attributes=[DocumentAttributeVideo(duration=0, w=0, h=0, supports_streaming=True)],
+                    attributes=[DocumentAttributeVideo(duration=0, w=display_width, h=display_height, supports_streaming=True)],
                 )
                 logger.info('已转发单条媒体消息')
         else:
