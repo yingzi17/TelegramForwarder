@@ -3,8 +3,32 @@ import os
 from filters.base_filter import BaseFilter
 from enums.enums import PreviewMode
 from telethon.errors import FloodWaitError
+from telethon.types import DocumentAttributeVideo
+from PIL import Image
+import os
+import ffmpeg
 
 logger = logging.getLogger(__name__)
+
+def get_video_info(file_path):
+    try:
+        probe = ffmpeg.probe(file_path)
+        video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+        if video_stream:
+            width = int(video_stream.get('width', 0))
+            height = int(video_stream.get('height', 0))
+            # 获取旋转信息（关键）
+            rotation = int(video_stream.get('tags', {}).get('rotate', 0))
+            # 如果存在旋转，修正显示尺寸
+            if rotation in [90, 270]:
+                display_width, display_height = height, width
+            else:
+                display_width, display_height = width, height
+            print(f"尺寸: {width}x{height}, 旋转: {rotation}°, 显示尺寸: {display_width}x{display_height}")
+            return display_width, display_height, rotation
+    except Exception as e:
+        print(f"ffmpeg 分析视频失败: {e}")
+    return None, None, 0
 
 class SenderFilter(BaseFilter):
     """
@@ -237,7 +261,7 @@ class SenderFilter(BaseFilter):
                     context.time_info + 
                     context.original_link
                 )
-                
+                display_width, display_height, rotation = get_video_info(file_path)
                 await client.send_file(
                     target_chat_id,
                     file_path,
@@ -248,7 +272,8 @@ class SenderFilter(BaseFilter):
                         PreviewMode.ON: True,
                         PreviewMode.OFF: False,
                         PreviewMode.FOLLOW: context.event.message.media is not None
-                    }[rule.is_preview]
+                    }[rule.is_preview],
+                    attributes=[DocumentAttributeVideo(duration=0, w=display_width, h=display_height, supports_streaming=True)]
                 )
                 logger.info(f'媒体消息已发送')
             except Exception as e:
